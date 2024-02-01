@@ -1,0 +1,219 @@
+version: "3.7"
+
+networks:
+  kong-net:
+    name: kong-net
+    driver: bridge
+    external: true
+
+services:
+  db:
+    image: postgres:9.5
+    environment:
+      POSTGRES_DB: kong
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong
+
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "kong" ]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+    stdin_open: true
+    tty: true
+    networks:
+      - kong-net
+
+  konga-prepare:
+    container_name: konga-prepare
+    image: pantsel/konga:latest
+    command: "-c prepare -a postgres -u postgresql://kong:kong@db:5432/konga_db"
+    networks:
+      - kong-net
+    restart: on-failure
+    depends_on:
+      - db
+
+  konga:
+    container_name: konga
+    image: pantsel/konga:latest
+    restart: always
+    networks:
+      - kong-net
+    environment:
+      DB_ADAPTER: postgres
+      DB_HOST: db
+      DB_USER: kong
+      DB_PASSWORD: kong
+      TOKEN_SECRET: ahfdjgjgf79JKLFHJKh978953kgdfjkl
+      DB_DATABASE: konga_db
+      NODE_ENV: production
+    depends_on:
+      - db
+    ports:
+      - "1337:1337"
+
+  kong-migrations:
+    image: "kong:2.3.2-alpine"
+    command: kong migrations bootstrap
+    depends_on:
+      - db
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    networks:
+      - kong-net
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  kong-migrations-up:
+    image: "kong:2.3.2-alpine"
+    command: kong migrations up && kong migrations finish
+    depends_on:
+      - db
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: db
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong
+    networks:
+      - kong-net
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  kong:
+    image: "kong:2.3.2-alpine"
+    user: "kong"
+    depends_on:
+      - db
+    environment:
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: '0.0.0.0:8001'
+      KONG_CASSANDRA_CONTACT_POINTS: db
+      KONG_DATABASE: postgres
+      KONG_PG_DATABASE: kong
+      KONG_PG_HOST: db
+      KONG_PG_USER: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_PG_PASSWORD: kong
+
+    networks:
+      - kong-net
+    ports:
+      - "8000:8000/tcp"
+      - "127.0.0.1:8001:8001/tcp"
+      - "8443:8443/tcp"
+      - "127.0.0.1:8444:8444/tcp"
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: on-failure
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+#  service-1:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8081"
+#      CONTENT: "<h1>Service A</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8081:8081
+#
+#  service-2:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8082"
+#      CONTENT: "<h1>Service b</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8082:8082
+#
+#  service-3:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8083"
+#      CONTENT: "<h1>Service C</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8083:8083
+#
+#  service-4:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8084"
+#      CONTENT: "<h1>Service D</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8084:8084
+#
+#  service-5:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8085"
+#      CONTENT: "<h1>Service E</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8085:8085
+#
+#  service-6:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8086"
+#      CONTENT: "<h1>Service F</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8086:8086
+#
+#  service-7:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8087"
+#      CONTENT: "<h1>Service G</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8087:8087
+#
+#  service-8:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8088"
+#      CONTENT: "<h1>Service H</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8088:8088
+#
+#  service-9:
+#    image: wesleywillians/kong-service:latest
+#    environment:
+#      PORT: ":8089"
+#      CONTENT: "<h1>Service J</h1>"
+#    networks:
+#      - kong-net
+#    ports:
+#      - 8089:8089
